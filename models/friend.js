@@ -1,13 +1,13 @@
 module.exports = (sequelize, DataTypes) => {
-  const friendshipRequest = sequelize.define(
-    "friendship_request",
+  const friend = sequelize.define(
+    "friend",
     {
-      sender_id: {
+      user1_id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         allowNull: false,
       },
-      receiver_id: {
+      user2_id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         allowNull: false,
@@ -15,5 +15,5 @@ module.exports = (sequelize, DataTypes) => {
     },
     { freezeTableName: true, timestamps: false, underscored: true }
   );
-  return friendshipRequest;
+  return friend;
 };

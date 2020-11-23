@@ -28,6 +28,18 @@ const assertUnauthenticated = (req, res, next) => {
   }
 };
 
+const assertAuthenticated = (req, res, next) => {
+  // assert valid token exists
+  if (req.tokenData) {
+    next();
+  } else {
+    res.status(403).send({
+      valid: false,
+      message: "Unauthenticated user",
+    });
+  }
+};
+
 const handleInvalidToken = (err, req, res, next) => {
   res.status(403).send({ valid: false, message: err.message });
   next();
@@ -90,7 +102,7 @@ router.post(
             httpOnly: true,
             maxAge: parseInt(process.env.token_max_age),
           });
-          res.status(201).send({ valid: true });
+          res.status(200).send({ valid: true });
         })
         .catch((err) => {
           // I need a better method to differ app issues VS DB issues (to handle status codes)
@@ -179,6 +191,7 @@ router.post(
 module.exports = {
   router,
   extractToken,
+  assertAuthenticated,
   assertUnauthenticated,
   handleInvalidToken,
 };
