@@ -29,6 +29,8 @@ db.friendshipRequestModel = require("./friendshipRequest")(
   DataTypes
 );
 db.friendModel = require("./friend")(sequelize, DataTypes);
+db.postModel = require("./post")(sequelize, DataTypes);
+db.commentModel = require("./comment")(sequelize, DataTypes);
 
 db.friendshipRequestModel.belongsTo(db.userModel, { as: "sender" });
 db.friendshipRequestModel.belongsTo(db.userModel, {

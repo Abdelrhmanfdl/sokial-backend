@@ -18,6 +18,7 @@ const extractToken = (req, res, next) => {
 
 const assertUnauthenticated = (req, res, next) => {
   // assert no token found, as the process is for unauthenticated people(e.g. login, signup)
+
   if (req.tokenData === undefined) {
     next();
   } else {
@@ -61,9 +62,9 @@ router.post(
       dob,
     } = req.body;
 
-    const lowerCaseEmail = email.toLowerCase();
-
     try {
+      const lowerCaseEmail = email.toLowerCase();
+
       db.userModel
         .findOne({
           attributes: ["id"],
@@ -99,7 +100,7 @@ router.post(
             process.env.token_secret_key
           );
           res.cookie("token", token, {
-            httpOnly: true,
+            //httpOnly: true,
             maxAge: parseInt(process.env.token_max_age),
           });
           res.status(200).send({ valid: true });
@@ -159,7 +160,7 @@ router.post(
               process.env.token_secret_key
             );
             res.cookie("token", token, {
-              httpOnly: true,
+              //httpOnly: true,
               maxAge: process.env.token_max_age,
             });
             res.status(200).send({ valid: true });
@@ -187,6 +188,10 @@ router.post(
   },
   handleInvalidToken
 );
+
+router.post("/logout", extractToken, assertAuthenticated, (req, res, next) => {
+  res.clearCookie("token").status(200).end();
+});
 
 module.exports = {
   router,

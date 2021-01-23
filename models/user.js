@@ -34,11 +34,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       country: {
-        type: DataTypes.STRING(5),
+        type: DataTypes.STRING(2),
         allowNull: false,
       },
       city: {
-        type: DataTypes.STRING,
+        type: DataTypes.STRING(20),
         allowNull: false,
       },
       profile_photo_path: {
