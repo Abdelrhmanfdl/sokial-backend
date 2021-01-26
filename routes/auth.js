@@ -3,6 +3,21 @@ const router = require("express").Router(),
   bcrypt = require("bcrypt"),
   jwt = require("jsonwebtoken");
 
+router.get("/about-auth", (req, res) => {
+  // Main component use it to check whether Auth or not, and get userData if auth
+  try {
+    const token = req.cookies.token;
+    if (!token) {
+      res.status(200).send({ auth: false });
+    } else {
+      const data = jwt.verify(token, process.env.token_secret_key);
+      res.status(200).send({ auth: true, userData: data });
+    }
+  } catch (e) {
+    res.status(200).send({ auth: false });
+  }
+});
+
 const extractToken = (req, res, next) => {
   try {
     const token = req.cookies.token;
@@ -96,14 +111,25 @@ router.post(
         })
         .then((newUser) => {
           const token = jwt.sign(
-            { id: newUser.id },
+            {
+              id: newUser.id,
+              firstName: fName,
+              lastName: lName,
+            },
             process.env.token_secret_key
           );
           res.cookie("token", token, {
-            //httpOnly: true,
+            httpOnly: true,
             maxAge: parseInt(process.env.token_max_age),
           });
-          res.status(200).send({ valid: true });
+          res.status(200).send({
+            valid: true,
+            userData: {
+              id: newUser.id,
+              firstName: fName,
+              lastName: lName,
+            },
+          });
         })
         .catch((err) => {
           // I need a better method to differ app issues VS DB issues (to handle status codes)
@@ -113,6 +139,7 @@ router.post(
           )
             res.status(500).send({
               valid: false,
+              message: err.message,
             });
           else
             res.status(403).send({
@@ -136,7 +163,7 @@ router.post(
     try {
       db.userModel
         .findOne({
-          attributes: ["id", "password"],
+          attributes: ["id", "first_name", "last_name", "password"],
           where: {
             email: lowerCaseEmail,
           },
@@ -156,14 +183,25 @@ router.post(
             isSamePassword = promiseArr[1];
           if (isSamePassword) {
             const token = jwt.sign(
-              { id: foundUser.id },
+              {
+                id: foundUser.id,
+                firstName: foundUser.first_name,
+                lastName: foundUser.last_name,
+              },
               process.env.token_secret_key
             );
             res.cookie("token", token, {
-              //httpOnly: true,
+              httpOnly: true,
               maxAge: process.env.token_max_age,
             });
-            res.status(200).send({ valid: true });
+            res.status(200).send({
+              valid: true,
+              userData: {
+                id: foundUser.id,
+                firstName: foundUser.first_name,
+                lastName: foundUser.last_name,
+              },
+            });
           } else {
             return Promise.reject({ message: "Invalid email or password" });
           }
