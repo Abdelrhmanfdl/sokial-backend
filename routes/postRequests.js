@@ -1,4 +1,5 @@
-const { commentModel } = require("../models/db_index");
+const { db_port } = require("../config/db.config");
+const { commentModel, sequelize, Sequelize } = require("../models/db_index");
 const post = require("../models/post");
 
 const router = require("express").Router(),
@@ -28,6 +29,8 @@ router.post(
       const myId = req.tokenData.id;
       const postType = "U";
       const { content, privacy, timestamp } = req.body;
+
+      console.log(content, timestamp);
 
       db.postModel
         .create({
@@ -160,6 +163,37 @@ router.delete(
     }
   },
   handleInvalidToken
+);
+
+// Get posts of a user by id
+router.get(
+  "/get-posts/:user_id",
+  extractToken,
+  assertAuthenticated,
+  (req, res, next) => {
+    try {
+      const userId = req.params.user_id;
+
+      db.postModel
+        .findAll({
+          attributes: ["content", "privacy", "timestamp"],
+          where: {
+            [db.Sequelize.Op.and]: [
+              { author_user_id: userId },
+              { post_type: "U" },
+            ],
+          },
+        })
+        .then((posts) => {
+          console.log(1);
+          res.status(200).send({ valid: true, posts: posts });
+        });
+    } catch (err) {
+      res
+        .status(err.statusCode || 500)
+        .send({ valid: false, message: err.message });
+    }
+  }
 );
 
 router.put(
