@@ -372,4 +372,44 @@ router.delete(
   handleInvalidToken
 );
 
+// Can be used when entering an profile
+router.get(
+  "/get-basic-user-data/:user_id",
+  extractToken,
+  assertAuthenticated,
+  (req, res) => {
+    try {
+      const userId = req.params.user_id;
+
+      db.userModel
+        .findOne({
+          /* TODO :: Add more attributes as useful */
+          attributes: ["id", "first_name", "last_name"],
+          where: {
+            id: userId,
+          },
+        })
+        .then((user) => {
+          if (!user) throw new Error("No user found");
+          res.status(200).send({
+            valid: true,
+            userData: {
+              id: user.id,
+              firstName: user.first_name,
+              lastName: user.last_name,
+            },
+          });
+        })
+        .catch((err) => {
+          res.status(400).send({ valid: false, message: err.message });
+        });
+    } catch (err) {
+      res
+        .status(err.statusCode || 500)
+        .send({ valid: false, message: err.message });
+    }
+  },
+  handleInvalidToken
+);
+
 module.exports = { router };
