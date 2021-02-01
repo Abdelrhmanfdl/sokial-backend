@@ -1,14 +1,21 @@
 const { compareSync } = require("bcrypt");
+const { sequelize } = require("../models/db_index");
+const { QueryTypes } = require("sequelize");
 
 const router = require("express").Router(),
   { extractToken, handleInvalidToken, assertAuthenticated } = require("./auth"),
   db = require("../models/db_index");
 
+// Send friendship request
 router.post(
   "/friendship-request/:receiver_id",
   extractToken,
   assertAuthenticated,
   (req, res, next) => {
+    /*
+       TODO :: Handle the case of sending requests in the same time between two users  
+    */
+
     try {
       const senderId = req.tokenData.id;
       const receiverId = parseInt(req.params.receiver_id);
@@ -47,13 +54,18 @@ router.post(
           if (foundRecord !== null) {
             return Promise.reject("Friendship request already exits.");
           } else {
+            const D = new Date();
             return db.friendshipRequestModel.create({
               sender_id: senderId,
               receiver_id: receiverId,
+              timestamp: `${D.getFullYear()}-${
+                D.getMonth() + 1
+              }-${D.getDate()} ${D.getHours()}-${D.getMinutes()}-${D.getSeconds()} `,
             });
           }
         })
         .then((newRecord) => {
+          console.log(">>>>>>>>", newRecord);
           res.status(200).send({ valid: true });
         })
         .catch((err) => {
@@ -75,6 +87,7 @@ router.post(
   handleInvalidToken
 );
 
+// Reject friendship request OR Unsend friendship request
 router.delete(
   "/friendship-request/:other_id",
   extractToken,
@@ -160,6 +173,9 @@ router.get(
               attributes: ["id", "first_name", "last_name"],
             },
           ],
+          order: [["timestamp", "DESC"]],
+          offset: Number(req.query.esc),
+          limit: Number(req.query.limit),
         })
         .then((records) => {
           // TODO :: get and return photo
@@ -168,8 +184,8 @@ router.get(
           records.forEach((record) => {
             data.push({
               id: record[theyAre].id,
-              first_name: record[theyAre].first_name,
-              last_name: record[theyAre].last_name,
+              firstName: record[theyAre].first_name,
+              lastName: record[theyAre].last_name,
             });
           });
           res.status(200).send({ valid: true, data });
@@ -184,6 +200,7 @@ router.get(
   handleInvalidToken
 );
 
+// Accept friendship request
 router.post(
   "/friendship-request/accept/:other_id",
   extractToken,
@@ -251,7 +268,7 @@ router.get(
   assertAuthenticated,
   (req, res) => {
     // respond with ( id , name , photo )
-    // ** to be modified (i think it's not a best practice to make 2 request 'me=user1', 'me=user2') **
+    // ** TODO ::  (i think it's not a best practice to make 2 request 'me=user1', 'me=user2') **
     try {
       const myId = req.tokenData.id;
       db.friendModel
@@ -316,6 +333,7 @@ router.get(
   handleInvalidToken
 );
 
+// Unfriend
 router.delete(
   "/friends/unfriend/:other_id",
   extractToken,
@@ -379,26 +397,72 @@ router.get(
   assertAuthenticated,
   (req, res) => {
     try {
-      const userId = req.params.user_id;
+      const myId = req.tokenData.id;
+      const userId = Number(req.params.user_id);
+      const getFriendshipRel = req.query.getFriendshipRel == "true";
 
-      db.userModel
-        .findOne({
-          /* TODO :: Add more attributes as useful */
+      let queryPromise;
+
+      // If the profile is "mine" (for the client) then no need to make 2 joins in the query
+      // TODO :: Search about the effect of such a join with one got entry, and update based on that
+      if (getFriendshipRel === false) {
+        queryPromise = db.userModel.findAll({
           attributes: ["id", "first_name", "last_name"],
           where: {
             id: userId,
           },
-        })
-        .then((user) => {
-          if (!user) throw new Error("No user found");
-          res.status(200).send({
+        });
+      } else {
+        /* 
+          - Currently i preferred to make a one big query over 3 small queries.
+          - This query is responsible for three tasks
+            1- get the basic data of the profile
+            2- get the friendship entry between 'me' and the profile (2 null's if not friends)
+            3- get the friendship request entry between 'me' and the profile (2 null's if no friendship req)
+               + from entry i got, i can know if this profile is a sender or receiver by the id's position.
+        */
+
+        queryPromise = sequelize.query(
+          `SELECT id, first_name,last_name, friend.user1_id AS fr1_id, friend.user2_id AS fr2_id
+            , fr_rel.sender_id AS sender_id, fr_rel.receiver_id AS receiver_id
+            FROM user AS prof LEFT OUTER JOIN friend
+            ON (prof.id = friend.user1_id and friend.user2_id = ${myId})
+            or(prof.id = friend.user2_id and friend.user1_id = ${myId}) 
+ 
+            LEFT OUTER JOIN friendship_request AS fr_rel
+            ON (prof.id = fr_rel.sender_id and receiver_id = ${myId})
+            or(prof.id = fr_rel.receiver_id and sender_id = ${myId})
+ 
+            WHERE prof.id = ${userId}`,
+
+          { type: QueryTypes.SELECT }
+        );
+      }
+
+      queryPromise
+        .then((entry) => {
+          entry = entry[0];
+          console.log(entry);
+          if (!entry) throw new Error("No user found");
+
+          let resBody = {
             valid: true,
             userData: {
-              id: user.id,
-              firstName: user.first_name,
-              lastName: user.last_name,
+              id: entry.id,
+              firstName: entry.first_name,
+              lastName: entry.last_name,
             },
-          });
+            friendshipRel: null,
+          };
+
+          if (myId !== userId) {
+            resBody.friendshipRel = {
+              areFriends: entry.fr1_id !== null,
+              friendshipReqSenderId: entry.sender_id,
+              friendshipReqReceiverId: entry.receiver_id,
+            };
+          }
+          res.status(200).send(resBody);
         })
         .catch((err) => {
           res.status(400).send({ valid: false, message: err.message });

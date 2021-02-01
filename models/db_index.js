@@ -31,6 +31,7 @@ db.friendshipRequestModel = require("./friendshipRequest")(
 db.friendModel = require("./friend")(sequelize, DataTypes);
 db.postModel = require("./post")(sequelize, DataTypes);
 db.commentModel = require("./comment")(sequelize, DataTypes);
+db.reactionModel = require("./reaction")(sequelize, DataTypes);
 
 db.friendshipRequestModel.belongsTo(db.userModel, { as: "sender" });
 db.friendshipRequestModel.belongsTo(db.userModel, {
@@ -39,5 +40,12 @@ db.friendshipRequestModel.belongsTo(db.userModel, {
 
 db.friendModel.belongsTo(db.userModel, { as: "user1" });
 db.friendModel.belongsTo(db.userModel, { as: "user2" });
+
+db.reactionModel.belongsTo(db.userModel, { as: "author_user" });
+db.commentModel.belongsTo(db.userModel, { as: "author_user" });
+
+db.reactionModel.belongsTo(db.postModel, { as: "post" });
+
+db.postModel.hasMany(db.reactionModel);
 
 module.exports = db;

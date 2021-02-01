@@ -172,20 +172,40 @@ router.get(
   assertAuthenticated,
   (req, res, next) => {
     try {
+      if (req.tokenData.isPage) {
+        next();
+        return;
+      }
+
+      const myId = req.tokenData.id;
       const userId = req.params.user_id;
 
       db.postModel
         .findAll({
-          attributes: ["content", "privacy", "timestamp"],
+          attributes: ["id", "content", "privacy", "timestamp"],
+
+          include: {
+            model: db.reactionModel,
+            required: false,
+            attributes: ["reaction_type"],
+            where: [
+              {
+                author_user_id: myId,
+              },
+            ],
+          },
+
           where: {
             [db.Sequelize.Op.and]: [
               { author_user_id: userId },
               { post_type: "U" },
             ],
           },
+          order: [["timestamp", "DESC"]],
+          offset: Number(req.query.esc),
+          limit: Number(req.query.limit),
         })
         .then((posts) => {
-          console.log(1);
           res.status(200).send({ valid: true, posts: posts });
         });
     } catch (err) {
@@ -308,14 +328,14 @@ router.put(
 );
 
 router.post(
-  "/comment/:post_id",
+  "/post/comment/:post_id",
   extractToken,
   assertAuthenticated,
   (req, res, next) => {
     // Handle both cases : author and page authors
     /*
     TODO :: Assert that the user who comment is authorized to make that comment.
-            ==> Than means that this user can't comment on a post that has a privacy 
+            ==> This means that this user can't comment on a post that has a privacy 
                 that prevents this user from commenting. 
                 (e.g. "Only me" post that user can't see) 
     
@@ -326,50 +346,21 @@ router.post(
       const myId = req.tokenData.id,
         postId = req.params.post_id;
 
-      db.postModel
-        .findOne({
-          attributes: ["id", "privacy", "comments_counter"],
-          where: {
-            id: postId,
-          },
-        })
-        .then((foundPost) => {
-          if (foundPost === null) {
-            const err = new Error("Invalid parameter");
-            err.statusCode = 400;
-            throw err;
-          } else {
-            const { content, timestamp } = req.body;
-            const commentToAdd = {
-              post_id: postId,
-              content: content,
-              timestamp: timestamp,
-            };
-            if (req.tokenData.isPage)
-              (commentToAdd.author_page_id = myId),
-                (commentToAdd.author_type = "P");
-            else
-              (commentToAdd.author_user_id = myId),
-                (commentToAdd.author_type = "U");
-            return Promise.all([
-              foundPost,
-              db.commentModel.create(commentToAdd),
-            ]);
-          }
-        })
-        .then(([post, comment]) => {
+      const { content, timestamp } = req.body;
+      const commentToAdd = {
+        post_id: postId,
+        content: content,
+        timestamp: timestamp,
+      };
+      if (req.tokenData.isPage)
+        (commentToAdd.author_page_id = myId), (commentToAdd.author_type = "P");
+      else
+        (commentToAdd.author_user_id = myId), (commentToAdd.author_type = "U");
+
+      db.commentModel
+        .create(commentToAdd)
+        .then((comment) => {
           if (comment === null) {
-            const err = new Error("Failed");
-            err.statusCode = 500;
-            throw err;
-          } else {
-            const beforeUpdate = post.comments_counter;
-            post.comments_counter += 1;
-            return Promise.all([beforeUpdate, post.save()]);
-          }
-        })
-        .then(([beforeUpdate, post]) => {
-          if (post.comments_counter === beforeUpdate) {
             const err = new Error("Failed");
             err.statusCode = 500;
             throw err;
@@ -379,7 +370,7 @@ router.post(
         })
         .catch((err) => {
           res
-            .status(err.statusCode || 500)
+            .status(err.statusCode || 400)
             .send({ valid: false, message: err.message });
         });
     } catch (err) {
@@ -390,6 +381,60 @@ router.post(
   },
   handleInvalidToken
 );
+
+/*--------------------------------------------------------------------------------------------- */
+
+router.get(
+  "/get-comments/:post_id",
+  extractToken,
+  assertAuthenticated,
+  (req, res, next) => {
+    try {
+      if (req.tokenData.isPage) {
+        next();
+        return;
+      }
+
+      const postId = req.params.post_id;
+
+      db.commentModel
+        .findAll({
+          attributes: [
+            "id",
+            "post_id",
+            "author_user_id",
+            "content",
+            "timestamp",
+          ],
+
+          include: {
+            model: db.userModel,
+            as: "author_user",
+            attributes: ["first_name", "last_name"],
+            required: true,
+          },
+
+          where: { post_id: postId },
+          order: [["timestamp", "DESC"]],
+          offset: Number(req.query.esc),
+          limit: Number(req.query.limit),
+        })
+        .then((comments) => {
+          res.status(200).send({ valid: true, comments: comments });
+        })
+        .catch((err) => {
+          res.status(400).send({ valid: false, message: err.message });
+        });
+    } catch (err) {
+      res
+        .status(err.statusCode || 500)
+        .send({ valid: false, message: err.message });
+    }
+  }
+);
+
+//=========================================================================================
+
 router.delete(
   "/comment/:comment_id",
   extractToken,
@@ -495,6 +540,74 @@ router.put(
             throw err;
           } else {
             res.status(200).send({ valid: true });
+          }
+        })
+        .catch((err) => {
+          res
+            .status(err.statusCode || 500)
+            .send({ valid: false, message: err.message });
+        });
+    } catch (err) {
+      res
+        .status(err.statusCode || 500)
+        .send({ valid: false, message: err.message });
+    }
+  },
+  handleInvalidToken
+);
+
+// ------------------------------------------------------------------------------------------------
+
+router.post(
+  "/post/react/:post_id",
+  extractToken,
+  assertAuthenticated,
+  (req, res, next) => {
+    try {
+      if (req.tokenData.isPage) {
+        next();
+        return;
+      }
+
+      const myId = req.tokenData.id;
+      const postId = req.params.post_id;
+      const reactionType = req.query.reaction_type;
+      const reactantType = "U";
+
+      const D = new Date();
+
+      db.reactionModel
+        .findOne({
+          attributes: ["id"],
+          where: {
+            [db.Sequelize.Op.and]: [
+              { post_id: postId },
+              { reactant_type: reactantType },
+              { author_user_id: myId },
+            ],
+          },
+        })
+        .then((result) => {
+          if (!result) {
+            // User has no reaction for this post, then create a reaction
+            db.reactionModel
+              .create({
+                post_id: postId,
+                author_user_id: myId,
+                reactant_type: reactantType,
+                reaction_type: reactionType,
+                timestamp: `${D.getFullYear()}-${
+                  D.getMonth() + 1
+                }-${D.getDate()} ${D.getHours()}-${D.getMinutes()}-${D.getSeconds()}`,
+              })
+              .then(() => {
+                res.status(200).send({ valid: true }).end();
+              });
+          } else {
+            // User already has reacted for this post, then create a reaction
+            result.destroy().then(() => {
+              res.status(200).send({ valid: true }).end();
+            });
           }
         })
         .catch((err) => {

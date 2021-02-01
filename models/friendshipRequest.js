@@ -12,6 +12,10 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
+      timestamp: {
+        type: "DATETIME",
+        allowNull: false,
+      },
     },
     { freezeTableName: true, timestamps: false, underscored: true }
   );
