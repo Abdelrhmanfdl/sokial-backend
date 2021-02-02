@@ -182,7 +182,13 @@ router.get(
 
       db.postModel
         .findAll({
-          attributes: ["id", "content", "privacy", "timestamp"],
+          attributes: [
+            "id",
+            "content",
+            "privacy",
+            "timestamp",
+            "author_user_id",
+          ],
 
           include: {
             model: db.reactionModel,
@@ -399,18 +405,12 @@ router.get(
 
       db.commentModel
         .findAll({
-          attributes: [
-            "id",
-            "post_id",
-            "author_user_id",
-            "content",
-            "timestamp",
-          ],
+          attributes: ["id", "post_id", "content", "timestamp"],
 
           include: {
             model: db.userModel,
             as: "author_user",
-            attributes: ["first_name", "last_name"],
+            attributes: ["first_name", "last_name", "id"],
             required: true,
           },
 
@@ -458,29 +458,6 @@ router.delete(
           if (result === 0) {
             const err = new Error("Invalid parameter");
             err.statusCode = 400;
-            throw err;
-          } else {
-            return db.postModel.findOne({
-              attributes: ["comments_counter"],
-              where: { post_id: postId },
-            });
-          }
-        })
-        .then((post) => {
-          if (post == null) {
-            const err = new Error("Failed"); // TODO :: roll back the transaction
-            err.statusCode = 500;
-            throw err;
-          } else {
-            const beforeUpdate = post.comments_counter;
-            post.comments_counter -= 1;
-            return Promise.all([beforeUpdate, post.save()]);
-          }
-        })
-        .then(([beforeUpdate, post]) => {
-          if (beforeUpdate === post.comments_counter) {
-            const err = new Error("Failed"); // TODO :: roll back the transaction
-            err.statusCode = 500;
             throw err;
           } else {
             res.status(200).send({ valid: true });
