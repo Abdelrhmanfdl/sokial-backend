@@ -188,6 +188,8 @@ router.get(
             "privacy",
             "timestamp",
             "author_user_id",
+            "reactions_counter",
+            "comments_counter",
           ],
 
           include: {
@@ -344,9 +346,6 @@ router.post(
             ==> This means that this user can't comment on a post that has a privacy 
                 that prevents this user from commenting. 
                 (e.g. "Only me" post that user can't see) 
-    
-    TODO :: Update comment_counter of the post
-
     */
     try {
       const myId = req.tokenData.id,

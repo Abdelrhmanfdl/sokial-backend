@@ -1,6 +1,10 @@
 const { compareSync } = require("bcrypt");
 const { sequelize } = require("../models/db_index");
 const { QueryTypes } = require("sequelize");
+const Busboy = require("busboy");
+const path = require("path");
+const fs = require("fs");
+const { profile, profileEnd } = require("console");
 
 const router = require("express").Router(),
   { extractToken, handleInvalidToken, assertAuthenticated } = require("./auth"),
@@ -407,7 +411,7 @@ router.get(
       // TODO :: Search about the effect of such a join with one got entry, and update based on that
       if (getFriendshipRel === false) {
         queryPromise = db.userModel.findAll({
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name", "last_name", "profile_photo_path"],
           where: {
             id: userId,
           },
@@ -423,7 +427,7 @@ router.get(
         */
 
         queryPromise = sequelize.query(
-          `SELECT id, first_name,last_name, friend.user1_id AS fr1_id, friend.user2_id AS fr2_id
+          `SELECT id, first_name,last_name, profile_photo_path, friend.user1_id AS fr1_id, friend.user2_id AS fr2_id
             , fr_rel.sender_id AS sender_id, fr_rel.receiver_id AS receiver_id
             FROM user AS prof LEFT OUTER JOIN friend
             ON (prof.id = friend.user1_id and friend.user2_id = ${myId})
@@ -451,6 +455,7 @@ router.get(
               id: entry.id,
               firstName: entry.first_name,
               lastName: entry.last_name,
+              profile_photo_path: entry.profile_photo_path,
             },
             friendshipRel: null,
           };
@@ -475,5 +480,85 @@ router.get(
   },
   handleInvalidToken
 );
+
+////////////////////////////////////////////////
+
+router.post(
+  "/profile/set-profile-img",
+  extractToken,
+  assertAuthenticated,
+  (req, res) => {
+    try {
+      const myId = req.tokenData.id;
+      db.userModel
+        .findOne({
+          attributes: ["id"],
+          where: { id: myId },
+        })
+        .then((user) => {
+          if (!user) {
+            const err = new Error("No user found");
+            err.statusCode = 400;
+            throw err;
+          }
+
+          const busboy = new Busboy({ headers: req.headers });
+          let imgPath;
+
+          busboy.on(
+            "file",
+            function (fieldname, file, filename, encoding, mimetype) {
+              imgPath = path.join(__dirname, `../uploads/${myId}_${filename}`);
+              file.pipe(fs.createWriteStream(imgPath));
+            }
+          );
+
+          busboy.on("finish", function () {
+            user.profile_photo_path = imgPath;
+            user
+              .save()
+              .then((result) => {
+                res.status(200).send({ valid: true });
+              })
+              .catch((err) => {
+                res
+                  .status(err.statusCode | 500)
+                  .send({ valid: false, message: err.message });
+              });
+          });
+
+          return req.pipe(busboy);
+        })
+        .catch((err) => {
+          res
+            .status(err.statusCode | 500)
+            .send({ valid: false, message: err.message });
+        });
+    } catch (err) {
+      res
+        .status(err.statusCode | 500)
+        .send({ valid: false, message: err.message });
+    }
+  },
+  handleInvalidToken
+);
+
+router.get("/get-profile-img/:user_id", (req, res) => {
+  try {
+    const userId = req.params.user_id;
+    const profile_photo_path = req.query.profile_photo_path;
+
+    //console.log("\n\n\n", profile_photo_path, "\n\n\n");
+    if (!profile_photo_path) {
+      return res
+        .status(400)
+        .send({ valid: false, message: "Image path isn't attached" });
+    }
+
+    res.sendFile(profile_photo_path);
+  } catch (err) {
+    res.status(err.statusCode | 500).send({ value: false });
+  }
+});
 
 module.exports = { router };

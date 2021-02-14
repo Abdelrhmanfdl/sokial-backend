@@ -17,6 +17,7 @@ app.use(cookieParser());
 app.use(require("./routes/auth").router);
 app.use(require("./routes/userRequests").router);
 app.use(require("./routes/postRequests").router);
+app.use(require("./routes/homeRequests").router);
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "sokial", "build", "index.html"));
