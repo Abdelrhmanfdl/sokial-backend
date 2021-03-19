@@ -267,7 +267,7 @@ router.post(
 );
 
 router.get(
-  "/friends",
+  "/get-friends",
   extractToken,
   assertAuthenticated,
   (req, res) => {
@@ -275,53 +275,21 @@ router.get(
     // ** TODO ::  (i think it's not a best practice to make 2 request 'me=user1', 'me=user2') **
     try {
       const myId = req.tokenData.id;
-      db.friendModel
-        .findAll({
-          attributes: [],
-          where: {
-            user1_id: myId,
-          },
-          include: {
-            model: db.userModel,
-            as: "user2",
-            required: true,
-            attributes: ["id", "first_name", "last_name"],
-          },
-        })
-        .then((records) => {
-          const secondQueryPromise = db.friendModel.findAll({
-            attributes: [],
-            where: {
-              user2_id: myId,
-            },
-            include: {
-              model: db.userModel,
-              as: "user1",
-              required: true,
-              attributes: ["id", "first_name", "last_name"],
-            },
-          });
+      const getFriendsOfId = req.query.friendsOfId;
 
-          return Promise.all([records, secondQueryPromise]);
-        })
-        .then((queryArr) => {
-          const data = [];
-          queryArr[0].forEach((record) => {
-            data.push({
-              id: record.user2.id,
-              first_name: record.user2.first_name,
-              last_name: record.user2.last_name,
-            });
-          });
-          queryArr[1].forEach((record) => {
-            data.push({
-              id: record.user1.id,
-              first_name: record.user1.first_name,
-              last_name: record.user1.last_name,
-            });
-          });
-
-          res.status(200).send({ valid: true, data });
+      sequelize
+        .query(
+          `
+        SELECT U.id AS id, U.first_name AS first_name, U.last_name AS last_name,
+        U.profile_photo_path AS profile_photo_path
+        FROM user AS U INNER JOIN friend AS FR 
+        ON ${getFriendsOfId} in (FR.user1_id, FR.user2_id) 
+        AND  U.id in (FR.user1_id, FR.user2_id) AND ${getFriendsOfId} != U.id;
+      `,
+          { type: QueryTypes.SELECT }
+        )
+        .then((friends) => {
+          return res.status(200).send({ valid: true, friends: friends });
         })
         .catch((err) => {
           res
@@ -549,7 +517,7 @@ router.get("/get-profile-img/:user_id", (req, res) => {
     const profile_photo_path = req.query.profile_photo_path;
 
     //console.log("\n\n\n", profile_photo_path, "\n\n\n");
-    if (!profile_photo_path) {
+    if (!profile_photo_path || profile_photo_path == "null") {
       return res
         .status(400)
         .send({ valid: false, message: "Image path isn't attached" });
@@ -557,7 +525,9 @@ router.get("/get-profile-img/:user_id", (req, res) => {
 
     res.sendFile(profile_photo_path);
   } catch (err) {
-    res.status(err.statusCode | 500).send({ value: false });
+    res
+      .status(err.statusCode | 500)
+      .send({ value: false, message: err.message });
   }
 });
 

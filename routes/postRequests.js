@@ -41,7 +41,10 @@ router.post(
           author_user_id: myId,
         })
         .then((newPost) => {
-          res.status(200).send({ valid: true });
+          res.status(200).send({
+            valid: true,
+            postData: { ...newPost.dataValues, content: undefined },
+          });
         })
         .catch((err) => {
           res.status(400).send({ valid: false, message: err.message });
@@ -207,6 +210,11 @@ router.get(
             [db.Sequelize.Op.and]: [
               { author_user_id: userId },
               { post_type: "U" },
+              {
+                timestamp: {
+                  [db.Sequelize.Op.lte]: req.query.beforeDate,
+                },
+              },
             ],
           },
           order: [["timestamp", "DESC"]],
@@ -215,6 +223,12 @@ router.get(
         })
         .then((posts) => {
           res.status(200).send({ valid: true, posts: posts });
+        })
+        .catch((err) => {
+          console.log("\n\n\n\n\n" + err.message + "\n\n\n");
+          res
+            .status(err.statusCode || 500)
+            .send({ valid: false, message: err.message });
         });
     } catch (err) {
       res
@@ -364,13 +378,23 @@ router.post(
 
       db.commentModel
         .create(commentToAdd)
-        .then((comment) => {
-          if (comment === null) {
+        .then((newComment) => {
+          if (newComment === null) {
             const err = new Error("Failed");
             err.statusCode = 500;
             throw err;
           } else {
-            res.status(200).send({ valid: true });
+            res.status(200).send({
+              valid: true,
+              commentData: {
+                id: newComment.dataValues.id,
+                author_type: newComment.dataValues.author_type,
+                author_user_id: newComment.dataValues.author_user_id,
+                post_id: newComment.dataValues.post_id,
+                reactions_counter: 0,
+                timestamp: newComment.dataValues.timestamp,
+              },
+            });
           }
         })
         .catch((err) => {
@@ -409,7 +433,7 @@ router.get(
           include: {
             model: db.userModel,
             as: "author_user",
-            attributes: ["first_name", "last_name", "id"],
+            attributes: ["first_name", "last_name", "id", "profile_photo_path"],
             required: true,
           },
 

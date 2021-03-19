@@ -41,6 +41,7 @@ db.friendshipRequestModel.belongsTo(db.userModel, {
 db.friendModel.belongsTo(db.userModel, { as: "user1" });
 db.friendModel.belongsTo(db.userModel, { as: "user2" });
 
+db.postModel.belongsTo(db.userModel, { as: "author_user" });
 db.reactionModel.belongsTo(db.userModel, { as: "author_user" });
 db.commentModel.belongsTo(db.userModel, { as: "author_user" });
 

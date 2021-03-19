@@ -5,13 +5,33 @@ const router = require("express").Router(),
 
 router.get("/about-auth", (req, res) => {
   // Main component use it to check whether Auth or not, and get userData if auth
+
   try {
     const token = req.cookies.token;
     if (!token) {
       res.status(200).send({ auth: false });
     } else {
       const data = jwt.verify(token, process.env.token_secret_key);
-      res.status(200).send({ auth: true, userData: data });
+      db.userModel
+        .findOne({
+          attributes: ["id", "first_name", "last_name", "profile_photo_path"],
+          where: {
+            id: data.id,
+          },
+        })
+        .then((foundUser) => {
+          if (foundUser)
+            res
+              .status(200)
+              .send({ auth: true, userData: foundUser.dataValues });
+          else throw new Error("Can't find user");
+        })
+        .catch((err) => {
+          res
+            .clearCookie("token")
+            .status(200)
+            .send({ auth: false, message: err.message });
+        });
     }
   } catch (e) {
     res.status(200).send({ auth: false });
@@ -163,7 +183,13 @@ router.post(
     try {
       db.userModel
         .findOne({
-          attributes: ["id", "first_name", "last_name", "password"],
+          attributes: [
+            "id",
+            "first_name",
+            "last_name",
+            "password",
+            "profile_photo_path",
+          ],
           where: {
             email: lowerCaseEmail,
           },
@@ -200,6 +226,7 @@ router.post(
                 id: foundUser.id,
                 firstName: foundUser.first_name,
                 lastName: foundUser.last_name,
+                profile_photo_path: foundUser.profile_photo_path,
               },
             });
           } else {
