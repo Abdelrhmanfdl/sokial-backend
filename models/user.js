@@ -41,7 +41,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(20),
         allowNull: false,
       },
-      profile_photo_path: {
+      profile_image_path: {
         type: DataTypes.STRING,
         allowNull: true,
       },

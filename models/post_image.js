@@ -1,27 +1,22 @@
 module.exports = (sequelize, DataTypes) => {
-  const Reaction = sequelize.define(
-    "reaction",
+  return sequelize.define(
+    "post_image",
     {
-      author_user_id: {
+      id: {
         type: DataTypes.INTEGER,
+        autoIncrement: true,
         primaryKey: true,
         allowNull: false,
       },
       post_id: {
         type: DataTypes.INTEGER,
-        primaryKey: true,
         allowNull: false,
       },
-      timestamp: {
-        type: "DATETIME",
-        allowNull: false,
-      },
-      reaction_type: {
-        type: "VARCHAR(1)", // Like='1'  | ...
+      image_path: {
+        type: "VARCHAR(1000)",
         allowNull: false,
       },
     },
     { freezeTableName: true, timestamps: false, underscored: true }
   );
-  return Reaction;
 };

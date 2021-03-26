@@ -14,7 +14,7 @@ router.get("/about-auth", (req, res) => {
       const data = jwt.verify(token, process.env.token_secret_key);
       db.userModel
         .findOne({
-          attributes: ["id", "first_name", "last_name", "profile_photo_path"],
+          attributes: ["id", "first_name", "last_name", "profile_image_path"],
           where: {
             id: data.id,
           },
@@ -188,7 +188,7 @@ router.post(
             "first_name",
             "last_name",
             "password",
-            "profile_photo_path",
+            "profile_image_path",
           ],
           where: {
             email: lowerCaseEmail,
@@ -226,7 +226,7 @@ router.post(
                 id: foundUser.id,
                 firstName: foundUser.first_name,
                 lastName: foundUser.last_name,
-                profile_photo_path: foundUser.profile_photo_path,
+                profile_image_path: foundUser.profile_image_path,
               },
             });
           } else {
@@ -240,6 +240,7 @@ router.post(
           )
             res.status(500).send({
               valid: false,
+              serverErrorMessage: err.message,
             });
           else
             res.status(403).send({

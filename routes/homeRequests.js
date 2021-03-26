@@ -18,7 +18,7 @@ router.get(
         .query(
           `
         SELECT distinct P.author_user_id, P.id AS post_id, 
-        U.first_name, U.last_name, U.profile_photo_path, P.content, P.privacy, P.timestamp, P.post_type,  
+        U.first_name, U.last_name, U.profile_image_path, P.content, P.privacy, P.timestamp, P.post_type,  
             P.reactions_counter, P.comments_counter, Re.reaction_type AS my_reaction_type
         FROM user AS U INNER JOIN friend AS FR
         ON U.id = FR.user1_id AND FR.user2_id = ${myId}

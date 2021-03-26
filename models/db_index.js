@@ -5,6 +5,7 @@ const sequelize = new Sequelize(
   dbConfig.db_username,
   dbConfig.db_password,
   {
+    logging: false,
     dialect: "mysql",
     host: dbConfig.db_host,
     port: dbConfig.db_port,
@@ -32,6 +33,7 @@ db.friendModel = require("./friend")(sequelize, DataTypes);
 db.postModel = require("./post")(sequelize, DataTypes);
 db.commentModel = require("./comment")(sequelize, DataTypes);
 db.reactionModel = require("./reaction")(sequelize, DataTypes);
+db.postImageModel = require("./post_image")(sequelize, DataTypes);
 
 db.friendshipRequestModel.belongsTo(db.userModel, { as: "sender" });
 db.friendshipRequestModel.belongsTo(db.userModel, {
@@ -42,11 +44,20 @@ db.friendModel.belongsTo(db.userModel, { as: "user1" });
 db.friendModel.belongsTo(db.userModel, { as: "user2" });
 
 db.postModel.belongsTo(db.userModel, { as: "author_user" });
-db.reactionModel.belongsTo(db.userModel, { as: "author_user" });
 db.commentModel.belongsTo(db.userModel, { as: "author_user" });
 
 db.reactionModel.belongsTo(db.postModel, { as: "post" });
 
 db.postModel.hasMany(db.reactionModel);
+db.postModel.hasMany(db.postImageModel);
+
+db.reactionModel.belongsTo(db.userModel, {
+  as: "author_user",
+  foreignKey: "author_user_id",
+});
+db.userModel.hasMany(db.reactionModel, {
+  as: "reactions",
+  foreignKey: "author_user_id",
+});
 
 module.exports = db;

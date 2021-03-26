@@ -1,10 +1,24 @@
 const { db_port } = require("../config/db.config");
 const { commentModel, sequelize, Sequelize } = require("../models/db_index");
 const post = require("../models/post");
+const fs = require("fs");
+const path = require("path");
+const Busboy = require("busboy");
+const UUID = require("uuid");
 
 const router = require("express").Router(),
   db = require("../models/db_index"),
   { extractToken, assertAuthenticated, handleInvalidToken } = require("./auth");
+
+const getUpdatedPostCounters = (postId) => {
+  // Return the updated number of comments and reactions for that post
+  return db.postModel.findOne({
+    attributes: ["reactions_counter", "comments_counter"],
+    where: {
+      id: postId,
+    },
+  });
+};
 
 router.post(
   "/post",
@@ -29,8 +43,6 @@ router.post(
       const myId = req.tokenData.id;
       const postType = "U";
       const { content, privacy, timestamp } = req.body;
-
-      console.log(content, timestamp);
 
       db.postModel
         .create({
@@ -168,6 +180,117 @@ router.delete(
   handleInvalidToken
 );
 
+router.post(
+  "/set-post-image/:post_id",
+  extractToken,
+  assertAuthenticated,
+  (req, res) => {
+    try {
+      const postId = req.params.post_id;
+      db.postModel
+        .findOne({
+          attributes: ["id"],
+          where: {
+            id: postId,
+          },
+        })
+        .then((foundPost) => {
+          if (!foundPost) {
+            const err = new Error("Invalid post id parameter");
+            err.status = 400;
+            throw err;
+          } else {
+            let imageName = UUID.v4();
+            const busboy = new Busboy({ headers: req.headers });
+            let imgPath;
+
+            busboy.on(
+              "file",
+              function (fieldname, file, filename, encoding, mimetype) {
+                imageName = imageName.concat(
+                  `.${mimetype.slice(mimetype.lastIndexOf("/") + 1)}`
+                );
+                imgPath = path.join(__dirname, "..", "uploads", `${imageName}`);
+                file.pipe(fs.createWriteStream(imgPath));
+              }
+            );
+            /*
+            busboy.on(
+              "field",
+              (
+                fieldname,
+                value,
+                fieldnameTruncated,
+                valueTruncated,
+                transferEncoding,
+                mimeType
+              ) => {
+                console.log("\n\n\n\n", fieldname, ": ", value, "\n\n\n\n");
+              }
+            );
+*/
+            busboy.on("finish", function () {
+              db.postImageModel
+                .create({
+                  image_path: imageName,
+                  post_id: postId,
+                })
+                .then((entry) => {
+                  res.send({ valid: true, imageData: entry });
+                })
+                .catch((err) => {
+                  res.send({ valid: false, message: err.message });
+                });
+            });
+
+            return req.pipe(busboy);
+          }
+        })
+        .catch((err) => {
+          res
+            .status(err.status || 500)
+            .send({ valid: false, message: err.message });
+        });
+    } catch (err) {
+      res
+        .status(err.status || 500)
+        .send({ valid: false, message: err.message });
+    }
+  },
+  handleInvalidToken
+);
+
+router.get(
+  "/get-post-image/:image_path",
+  extractToken,
+  assertAuthenticated,
+  (req, res, next) => {
+    try {
+      const imagePath = req.params.image_path;
+      const fullPath = path.join(__dirname, "..", "uploads", imagePath);
+
+      // Async check for whether the image exists
+      fs.access(fullPath, (err) => {
+        if (err) {
+          // If doesn't exist ==> error
+          return res.status(400).send({
+            valid: false,
+            message: "This image doesn't exist",
+          });
+        } else {
+          // If the image exists
+          return res.sendFile(fullPath);
+        }
+      });
+    } catch (err) {
+      res
+        .status(err.status || 500)
+        .send({ valid: false, message: err.message });
+    }
+  },
+  handleInvalidToken
+);
+
 // Get posts of a user by id
 router.get(
   "/get-posts/:user_id",
@@ -195,16 +318,23 @@ router.get(
             "comments_counter",
           ],
 
-          include: {
-            model: db.reactionModel,
-            required: false,
-            attributes: ["reaction_type"],
-            where: [
-              {
-                author_user_id: myId,
-              },
-            ],
-          },
+          include: [
+            {
+              model: db.postImageModel,
+              required: false,
+              attributes: ["id", "image_path"],
+            },
+            {
+              model: db.reactionModel,
+              required: false,
+              attributes: ["reaction_type"],
+              where: [
+                {
+                  author_user_id: myId,
+                },
+              ],
+            },
+          ],
 
           where: {
             [db.Sequelize.Op.and]: [
@@ -222,6 +352,7 @@ router.get(
           limit: Number(req.query.limit),
         })
         .then((posts) => {
+          // [{ id, content, ...., post_images:[{id, image_path}]  }]
           res.status(200).send({ valid: true, posts: posts });
         })
         .catch((err) => {
@@ -433,7 +564,7 @@ router.get(
           include: {
             model: db.userModel,
             as: "author_user",
-            attributes: ["first_name", "last_name", "id", "profile_photo_path"],
+            attributes: ["first_name", "last_name", "id", "profile_image_path"],
             required: true,
           },
 
@@ -443,6 +574,7 @@ router.get(
           limit: Number(req.query.limit),
         })
         .then((comments) => {
+          // data sent : { id, post_id, content, timestamp, author_user:{id, first_name, last_name, profile_image_path} }
           res.status(200).send({ valid: true, comments: comments });
         })
         .catch((err) => {
@@ -558,31 +690,75 @@ router.put(
 
 // ------------------------------------------------------------------------------------------------
 
+router.get(
+  "/post/react/post-reactants/:post_id",
+  extractToken,
+  assertAuthenticated,
+  (req, res) => {
+    try {
+      const postId = req.params.post_id;
+      db.userModel
+        .findAll({
+          raw: true,
+          attributes: [
+            "id",
+            ["first_name", "firstName"],
+            ["last_name", "lastName"],
+            ["profile_image_path", "profileImagePath"],
+          ],
+
+          include: [
+            {
+              as: "reactions",
+              model: db.reactionModel,
+              require: true,
+              where: {
+                post_id: postId,
+                timestamp: {
+                  [db.Sequelize.Op.lte]: req.query.beforeDate,
+                },
+              },
+              attributes: ["timestamp"],
+            },
+          ],
+
+          order: [["reactions", "timestamp", "DESC"]],
+          offset: Number(req.query.esc),
+          limit: Number(req.query.limit),
+        })
+        .then((results) => {
+          res.status(200).send({ valid: true, reactants: results });
+        })
+        .catch((err) => {
+          res.status(500).send({ valid: false, message: err.message });
+        });
+    } catch (err) {
+      res
+        .status(err.statusCode || 500)
+        .send({ valid: false, message: err.message });
+    }
+  },
+  handleInvalidToken
+);
+
 router.post(
   "/post/react/:post_id",
   extractToken,
   assertAuthenticated,
   (req, res, next) => {
     try {
-      if (req.tokenData.isPage) {
-        next();
-        return;
-      }
-
       const myId = req.tokenData.id;
       const postId = req.params.post_id;
       const reactionType = req.query.reaction_type;
-      const reactantType = "U";
 
       const D = new Date();
 
       db.reactionModel
         .findOne({
-          attributes: ["id"],
+          attributes: ["author_user_id", "post_id"],
           where: {
             [db.Sequelize.Op.and]: [
               { post_id: postId },
-              { reactant_type: reactantType },
               { author_user_id: myId },
             ],
           },
@@ -594,20 +770,40 @@ router.post(
               .create({
                 post_id: postId,
                 author_user_id: myId,
-                reactant_type: reactantType,
                 reaction_type: reactionType,
                 timestamp: `${D.getFullYear()}-${
                   D.getMonth() + 1
                 }-${D.getDate()} ${D.getHours()}-${D.getMinutes()}-${D.getSeconds()}`,
               })
               .then(() => {
-                res.status(200).send({ valid: true }).end();
+                return getUpdatedPostCounters(postId);
+              })
+              .then((entry) => {
+                console.log(entry);
+                res
+                  .status(200)
+                  .send({ valid: true, post_counters: entry.dataValues });
+              })
+              .catch((err) => {
+                console.log(err.message);
+                throw new Error(err.message);
               });
           } else {
             // User already has reacted for this post, then create a reaction
-            result.destroy().then(() => {
-              res.status(200).send({ valid: true }).end();
-            });
+            result
+              .destroy()
+              .then(() => {
+                return getUpdatedPostCounters(postId);
+              })
+              .then((entry) => {
+                res
+                  .status(200)
+                  .send({ valid: true, post_counters: entry.dataValues });
+              })
+              .catch((err) => {
+                console.log(err.message);
+                throw new Error(err.message);
+              });
           }
         })
         .catch((err) => {

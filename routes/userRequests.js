@@ -4,6 +4,7 @@ const { QueryTypes } = require("sequelize");
 const Busboy = require("busboy");
 const path = require("path");
 const fs = require("fs");
+const UUID = require("uuid");
 const { profile, profileEnd } = require("console");
 
 const router = require("express").Router(),
@@ -69,7 +70,6 @@ router.post(
           }
         })
         .then((newRecord) => {
-          console.log(">>>>>>>>", newRecord);
           res.status(200).send({ valid: true });
         })
         .catch((err) => {
@@ -155,7 +155,7 @@ router.get(
   extractToken,
   assertAuthenticated,
   (req, res, next) => {
-    // respond with (id, name, photo)
+    // respond with (id, name, image)
 
     try {
       const myId = req.tokenData.id;
@@ -182,7 +182,7 @@ router.get(
           limit: Number(req.query.limit),
         })
         .then((records) => {
-          // TODO :: get and return photo
+          // TODO :: get and return image
           const data = [];
           const theyAre = asReceiver ? "sender" : "receiver";
           records.forEach((record) => {
@@ -271,7 +271,7 @@ router.get(
   extractToken,
   assertAuthenticated,
   (req, res) => {
-    // respond with ( id , name , photo )
+    // respond with ( id , name , image )
     // ** TODO ::  (i think it's not a best practice to make 2 request 'me=user1', 'me=user2') **
     try {
       const myId = req.tokenData.id;
@@ -281,7 +281,7 @@ router.get(
         .query(
           `
         SELECT U.id AS id, U.first_name AS first_name, U.last_name AS last_name,
-        U.profile_photo_path AS profile_photo_path
+        U.profile_image_path AS profile_image_path
         FROM user AS U INNER JOIN friend AS FR 
         ON ${getFriendsOfId} in (FR.user1_id, FR.user2_id) 
         AND  U.id in (FR.user1_id, FR.user2_id) AND ${getFriendsOfId} != U.id;
@@ -379,7 +379,7 @@ router.get(
       // TODO :: Search about the effect of such a join with one got entry, and update based on that
       if (getFriendshipRel === false) {
         queryPromise = db.userModel.findAll({
-          attributes: ["id", "first_name", "last_name", "profile_photo_path"],
+          attributes: ["id", "first_name", "last_name", "profile_image_path"],
           where: {
             id: userId,
           },
@@ -395,7 +395,7 @@ router.get(
         */
 
         queryPromise = sequelize.query(
-          `SELECT id, first_name,last_name, profile_photo_path, friend.user1_id AS fr1_id, friend.user2_id AS fr2_id
+          `SELECT id, first_name,last_name, profile_image_path, friend.user1_id AS fr1_id, friend.user2_id AS fr2_id
             , fr_rel.sender_id AS sender_id, fr_rel.receiver_id AS receiver_id
             FROM user AS prof LEFT OUTER JOIN friend
             ON (prof.id = friend.user1_id and friend.user2_id = ${myId})
@@ -414,7 +414,6 @@ router.get(
       queryPromise
         .then((entry) => {
           entry = entry[0];
-          console.log(entry);
           if (!entry) throw new Error("No user found");
 
           let resBody = {
@@ -423,7 +422,7 @@ router.get(
               id: entry.id,
               firstName: entry.first_name,
               lastName: entry.last_name,
-              profile_photo_path: entry.profile_photo_path,
+              profile_image_path: entry.profile_image_path,
             },
             friendshipRel: null,
           };
@@ -469,20 +468,22 @@ router.post(
             err.statusCode = 400;
             throw err;
           }
-
           const busboy = new Busboy({ headers: req.headers });
+          let imageName = UUID.v4();
           let imgPath;
-
           busboy.on(
             "file",
             function (fieldname, file, filename, encoding, mimetype) {
-              imgPath = path.join(__dirname, `../uploads/${myId}_${filename}`);
+              imageName = imageName.concat(
+                `.${mimetype.slice(mimetype.lastIndexOf("/") + 1)}`
+              );
+              imgPath = path.join(__dirname, "..", "uploads", imageName);
               file.pipe(fs.createWriteStream(imgPath));
             }
           );
 
           busboy.on("finish", function () {
-            user.profile_photo_path = imgPath;
+            user.profile_image_path = imageName;
             user
               .save()
               .then((result) => {
@@ -490,7 +491,7 @@ router.post(
               })
               .catch((err) => {
                 res
-                  .status(err.statusCode | 500)
+                  .status(err.statusCode || 500)
                   .send({ valid: false, message: err.message });
               });
           });
@@ -499,12 +500,12 @@ router.post(
         })
         .catch((err) => {
           res
-            .status(err.statusCode | 500)
+            .status(err.statusCode || 500)
             .send({ valid: false, message: err.message });
         });
     } catch (err) {
       res
-        .status(err.statusCode | 500)
+        .status(err.statusCode || 500)
         .send({ valid: false, message: err.message });
     }
   },
@@ -514,19 +515,29 @@ router.post(
 router.get("/get-profile-img/:user_id", (req, res) => {
   try {
     const userId = req.params.user_id;
-    const profile_photo_path = req.query.profile_photo_path;
+    const profile_image_path = req.query.profile_image_path;
 
-    //console.log("\n\n\n", profile_photo_path, "\n\n\n");
-    if (!profile_photo_path || profile_photo_path == "null") {
+    //console.log("\n\n\n", profile_image_path, "\n\n\n");
+    if (!profile_image_path || profile_image_path == "null") {
       return res
         .status(400)
         .send({ valid: false, message: "Image path isn't attached" });
     }
 
-    res.sendFile(profile_photo_path);
+    const fullPath = path.join(__dirname, "..", "uploads", profile_image_path);
+
+    fs.access(fullPath, (err) => {
+      if (err) {
+        return res
+          .status(400)
+          .send({ valid: false, message: "Image doesn't exist" });
+      } else {
+        res.sendFile(fullPath);
+      }
+    });
   } catch (err) {
     res
-      .status(err.statusCode | 500)
+      .status(err.statusCode || 500)
       .send({ value: false, message: err.message });
   }
 });
