@@ -19,7 +19,8 @@ router.get(
           `
         SELECT distinct P.author_user_id, P.id AS post_id, 
         U.first_name, U.last_name, U.profile_image_path, P.content, P.privacy, P.timestamp, P.post_type,  
-            P.reactions_counter, P.comments_counter, Re.reaction_type AS my_reaction_type
+            P.reactions_counter, P.comments_counter, Re.reaction_type AS my_reaction_type, 
+            post_image.image_path AS post_image_path
         FROM user AS U INNER JOIN friend AS FR
         ON U.id = FR.user1_id AND FR.user2_id = ${myId}
         OR U.id = FR.user2_id AND FR.user1_id = ${myId}
@@ -28,11 +29,12 @@ router.get(
         ON U.id = P.author_user_id
         LEFT OUTER JOIN reaction AS Re
         ON P.id = Re.post_id AND Re.author_user_id = ${myId}
+        LEFT OUTER JOIN post_image
+        ON P.id = post_image.post_id
         ORDER BY P.timestamp DESC limit ${esc}, ${limit};`,
           { type: QueryTypes.SELECT }
         )
         .then((entries) => {
-          console.log(entries);
           res.status(200).send({ valid: true, entries });
         })
         .catch((err) => {

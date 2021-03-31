@@ -24,10 +24,6 @@ module.exports = (sequelize, DataTypes) => {
         type: "varchar(14000)",
         allowNull: false,
       },
-      post_image_id: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-      },
       timestamp: {
         type: "DATETIME",
         allowNull: false,

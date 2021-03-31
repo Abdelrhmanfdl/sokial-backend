@@ -305,6 +305,49 @@ router.get(
   handleInvalidToken
 );
 
+router.get(
+  "/get-number-of-profile-images/:user_id",
+  extractToken,
+  assertAuthenticated,
+  (req, res) => {
+    try {
+      // used to get the most recent 6 images for the profile
+
+      const userId = req.params.user_id;
+      const numImagesToSelect = req.query.numOfImages;
+
+      db.postModel
+        .findAll({
+          where: {
+            author_user_id: userId,
+          },
+          attributes: ["timestamp"],
+
+          include: [
+            {
+              model: db.postImageModel,
+              required: true,
+              attributes: ["image_path"],
+            },
+          ],
+
+          order: [["timestamp", "DESC"]],
+          limit: Number(numImagesToSelect),
+        })
+        .then((results) => {
+          results = results.map((result) => result.post_images[0].image_path);
+          res.send({ valid: true, results: results });
+        })
+        .catch((err) => {
+          res.status(500).send({ valid: false, message: err.message });
+        });
+    } catch (err) {
+      res.status(500).send({ valid: false, message: err.message });
+    }
+  },
+  handleInvalidToken
+);
+
 // Unfriend
 router.delete(
   "/friends/unfriend/:other_id",
@@ -379,7 +422,14 @@ router.get(
       // TODO :: Search about the effect of such a join with one got entry, and update based on that
       if (getFriendshipRel === false) {
         queryPromise = db.userModel.findAll({
-          attributes: ["id", "first_name", "last_name", "profile_image_path"],
+          attributes: [
+            "id",
+            "first_name",
+            "last_name",
+            "profile_image_path",
+            "country",
+            "city",
+          ],
           where: {
             id: userId,
           },
@@ -395,12 +445,11 @@ router.get(
         */
 
         queryPromise = sequelize.query(
-          `SELECT id, first_name,last_name, profile_image_path, friend.user1_id AS fr1_id, friend.user2_id AS fr2_id
+          `SELECT id, first_name,last_name, country, city, profile_image_path, friend.user1_id AS fr1_id, friend.user2_id AS fr2_id
             , fr_rel.sender_id AS sender_id, fr_rel.receiver_id AS receiver_id
             FROM user AS prof LEFT OUTER JOIN friend
             ON (prof.id = friend.user1_id and friend.user2_id = ${myId})
             or(prof.id = friend.user2_id and friend.user1_id = ${myId}) 
- 
             LEFT OUTER JOIN friendship_request AS fr_rel
             ON (prof.id = fr_rel.sender_id and receiver_id = ${myId})
             or(prof.id = fr_rel.receiver_id and sender_id = ${myId})
@@ -410,10 +459,20 @@ router.get(
           { type: QueryTypes.SELECT }
         );
       }
-
       queryPromise
         .then((entry) => {
           entry = entry[0];
+          return Promise.all([
+            entry,
+            db.countryModel.findOne({
+              attributes: ["name"],
+              where: {
+                code: entry.country,
+              },
+            }),
+          ]);
+        })
+        .then(([entry, country]) => {
           if (!entry) throw new Error("No user found");
 
           let resBody = {
@@ -423,6 +482,8 @@ router.get(
               firstName: entry.first_name,
               lastName: entry.last_name,
               profile_image_path: entry.profile_image_path,
+              country: country.name,
+              city: entry.city,
             },
             friendshipRel: null,
           };

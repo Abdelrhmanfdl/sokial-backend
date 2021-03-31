@@ -53,6 +53,7 @@ router.post(
           author_user_id: myId,
         })
         .then((newPost) => {
+          console.log(newPost);
           res.status(200).send({
             valid: true,
             postData: { ...newPost.dataValues, content: undefined },
@@ -353,6 +354,7 @@ router.get(
         })
         .then((posts) => {
           // [{ id, content, ...., post_images:[{id, image_path}]  }]
+          console.log(posts[0]);
           res.status(200).send({ valid: true, posts: posts });
         })
         .catch((err) => {
@@ -779,7 +781,6 @@ router.post(
                 return getUpdatedPostCounters(postId);
               })
               .then((entry) => {
-                console.log(entry);
                 res
                   .status(200)
                   .send({ valid: true, post_counters: entry.dataValues });

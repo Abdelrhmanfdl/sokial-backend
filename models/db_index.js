@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes } = require("sequelize");
 const dbConfig = require("../config/db.config");
+const country = require("./country");
 const sequelize = new Sequelize(
   dbConfig.db_name,
   dbConfig.db_username,
@@ -34,6 +35,7 @@ db.postModel = require("./post")(sequelize, DataTypes);
 db.commentModel = require("./comment")(sequelize, DataTypes);
 db.reactionModel = require("./reaction")(sequelize, DataTypes);
 db.postImageModel = require("./post_image")(sequelize, DataTypes);
+db.countryModel = require("./country")(sequelize, DataTypes);
 
 db.friendshipRequestModel.belongsTo(db.userModel, { as: "sender" });
 db.friendshipRequestModel.belongsTo(db.userModel, {
@@ -49,7 +51,9 @@ db.commentModel.belongsTo(db.userModel, { as: "author_user" });
 db.reactionModel.belongsTo(db.postModel, { as: "post" });
 
 db.postModel.hasMany(db.reactionModel);
-db.postModel.hasMany(db.postImageModel);
+db.postModel.hasMany(db.postImageModel, {
+  foreignKey: "post_id",
+});
 
 db.reactionModel.belongsTo(db.userModel, {
   as: "author_user",
